@@ -175,3 +175,24 @@ docker run --rm -it graphql-cop:latest --help
 Troubleshooting
 1. File Not Found Error: If the container cannot find the script to execute, ensure the repository structure is intact and the Dockerfile is correctly set up.
 2. Dependencies Issue: If there are missing dependencies, verify that the requirements.txt file is complete.
+
+## GraphQOL Web UI
+
+A Flask-based local web application is included to provide a unified graphical frontend for:
+- **GraphQL Cop** scan results
+- **Graphw00f** engine fingerprinting output
+- **GraphQL Voyager** interactive schema visualization (via introspection)
+
+### Run the web app
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 app.py
+```
+
+Then open: `http://127.0.0.1:5000`
+
+### Notes
+- The UI executes `graphql-cop.py` directly.
+- The UI expects `graphw00f` to be installed and available in `PATH`.
+- If introspection is disabled on the target endpoint, Voyager will display an error in the UI.

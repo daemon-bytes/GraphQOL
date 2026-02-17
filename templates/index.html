@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GraphQOL Console</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/graphql-voyager/dist/voyager.css" />
+  </head>
+  <body>
+    <header>
+      <h1>GraphQOL Console</h1>
+      <p>Unified visual interface for GraphQL Cop, Graphw00f, and GraphQL Voyager.</p>
+    </header>
+
+    <main>
+      <section class="panel controls">
+        <label for="target">Target GraphQL endpoint</label>
+        <input id="target" type="url" placeholder="https://example.com/graphql" />
+
+        <label for="headers">Optional headers JSON</label>
+        <textarea id="headers" rows="4" placeholder='{"Authorization":"Bearer token"}'></textarea>
+
+        <button id="run-all">Run Full Analysis</button>
+      </section>
+
+      <section class="panel" id="cop-panel">
+        <h2>GraphQL Cop Findings</h2>
+        <div id="cop-summary" class="muted">No scan executed yet.</div>
+        <pre id="cop-output"></pre>
+      </section>
+
+      <section class="panel" id="w00f-panel">
+        <h2>Graphw00f Fingerprint</h2>
+        <div id="w00f-summary" class="muted">No scan executed yet.</div>
+        <pre id="w00f-output"></pre>
+      </section>
+
+      <section class="panel voyager-panel">
+        <h2>GraphQL Voyager (Introspection Graph)</h2>
+        <div id="voyager-status" class="muted">No introspection loaded yet.</div>
+        <div id="voyager"></div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/graphql-voyager/dist/voyager.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+</html>
