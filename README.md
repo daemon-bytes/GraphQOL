@@ -178,25 +178,21 @@ Troubleshooting
 
 ## GraphQOL Web UI
 
-The GraphQOL web app is intentionally standalone: clone, install requirements, run.
+A Flask-based local web application is included to provide a unified graphical frontend for:
+- **GraphQL Cop** scan results
+- **Graphw00f** engine fingerprinting output
+- **GraphQL Voyager** interactive schema visualization (via introspection)
 
-### 30-second quick start
+### Run the web app
 
 ```bash
-git clone https://github.com/dolevf/graphql-cop.git
-cd graphql-cop
 python3 -m pip install -r requirements.txt
 python3 app.py
 ```
 
-Open `http://127.0.0.1:5000`.
+Then open: `http://127.0.0.1:5000`
 
-No compile step, no test-client bootstrap, and no extra service setup is required.
-
-### What the web app includes
-- **GraphQL engine identification (Python-native heuristics)**
-- **Engine-specific security hardening notes**
-- **GraphQL Cop-equivalent audit** (same test modules under `lib/tests`)
-- **Interactive schema graph**
-- **Schema object inventory**
-- **Built-in GraphQL query runner**
+### Notes
+- The UI executes `graphql-cop.py` directly.
+- The UI expects `graphw00f` to be installed and available in `PATH`.
+- If introspection is disabled on the target endpoint, Voyager will display an error in the UI.

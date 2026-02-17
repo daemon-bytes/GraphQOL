@@ -3,69 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GraphQOL Security Workbench</title>
+    <title>GraphQOL Console</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
-    <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/graphql-voyager/dist/voyager.css" />
   </head>
   <body>
     <header>
-      <h1>GraphQOL Security Workbench</h1>
-      <p>Engine fingerprinting, GraphQL-Cop-equivalent auditing, schema mapping, and query execution.</p>
+      <h1>GraphQOL Console</h1>
+      <p>Unified visual interface for GraphQL Cop, Graphw00f, and GraphQL Voyager.</p>
     </header>
 
     <main>
       <section class="panel controls">
-        <h2>Target Configuration</h2>
         <label for="target">Target GraphQL endpoint</label>
         <input id="target" type="url" placeholder="https://example.com/graphql" />
 
         <label for="headers">Optional headers JSON</label>
         <textarea id="headers" rows="4" placeholder='{"Authorization":"Bearer token"}'></textarea>
 
-        <button id="analyze">Run Security + Schema Analysis</button>
-        <div id="analysis-status" class="muted">No analysis executed yet.</div>
+        <button id="run-all">Run Full Analysis</button>
       </section>
 
-      <section class="panel">
-        <h2>Engine Identification</h2>
-        <div id="engine-summary" class="muted">No engine detected yet.</div>
-        <ul id="engine-notes"></ul>
+      <section class="panel" id="cop-panel">
+        <h2>GraphQL Cop Findings</h2>
+        <div id="cop-summary" class="muted">No scan executed yet.</div>
+        <pre id="cop-output"></pre>
       </section>
 
-      <section class="panel">
-        <h2>GraphQL Cop-Equivalent Audit</h2>
-        <div id="audit-summary" class="muted">No audit executed yet.</div>
-        <pre id="audit-output"></pre>
+      <section class="panel" id="w00f-panel">
+        <h2>Graphw00f Fingerprint</h2>
+        <div id="w00f-summary" class="muted">No scan executed yet.</div>
+        <pre id="w00f-output"></pre>
       </section>
 
-      <section class="panel">
-        <h2>Schema Objects</h2>
-        <div id="objects-summary" class="muted">No schema loaded yet.</div>
-        <div id="objects-list" class="object-list"></div>
-      </section>
-
-      <section class="panel graph-panel">
-        <h2>Interactive Schema Graph</h2>
-        <div id="graph-status" class="muted">No graph loaded yet.</div>
-        <div id="schema-graph"></div>
-      </section>
-
-      <section class="panel query-panel">
-        <h2>Query Runner</h2>
-        <label for="query">GraphQL Query</label>
-        <textarea id="query" rows="6" placeholder="query { __typename }"></textarea>
-
-        <label for="variables">Variables JSON (optional)</label>
-        <textarea id="variables" rows="4" placeholder='{"id": "123"}'></textarea>
-
-        <label for="operationName">Operation Name (optional)</label>
-        <input id="operationName" type="text" placeholder="MyQuery" />
-
-        <button id="run-query">Run Query</button>
-        <pre id="query-output"></pre>
+      <section class="panel voyager-panel">
+        <h2>GraphQL Voyager (Introspection Graph)</h2>
+        <div id="voyager-status" class="muted">No introspection loaded yet.</div>
+        <div id="voyager"></div>
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/graphql-voyager/dist/voyager.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   </body>
 </html>

@@ -1,13 +1,15 @@
 import json
-from typing import Any, Dict, List, Tuple
+import os
+import subprocess
+from typing import Dict, Any, Tuple
 
 import requests
 from flask import Flask, jsonify, render_template, request
 
-from config import HEADERS as GRAPHCOP_HEADERS
-from lib.tests import tests as graphql_cop_tests
-
 app = Flask(__name__)
+
+GRAPHQL_COP_SCRIPT = os.getenv("GRAPHQL_COP_SCRIPT", "graphql-cop.py")
+GRAPHW00F_CMD = os.getenv("GRAPHW00F_CMD", "graphw00f")
 
 INTROSPECTION_QUERY = """
 query IntrospectionQuery {
@@ -16,26 +18,57 @@ query IntrospectionQuery {
     mutationType { name }
     subscriptionType { name }
     types {
-      kind
-      name
-      fields(includeDeprecated: true) {
-        name
-        type { ...TypeRef }
-      }
-      inputFields {
-        name
-        type { ...TypeRef }
-      }
-      interfaces { ...TypeRef }
-      possibleTypes { ...TypeRef }
-      enumValues(includeDeprecated: true) { name }
+      ...FullType
     }
     directives {
       name
       description
       locations
+      args {
+        ...InputValue
+      }
     }
   }
+}
+
+fragment FullType on __Type {
+  kind
+  name
+  description
+  fields(includeDeprecated: true) {
+    name
+    description
+    args {
+      ...InputValue
+    }
+    type {
+      ...TypeRef
+    }
+    isDeprecated
+    deprecationReason
+  }
+  inputFields {
+    ...InputValue
+  }
+  interfaces {
+    ...TypeRef
+  }
+  enumValues(includeDeprecated: true) {
+    name
+    description
+    isDeprecated
+    deprecationReason
+  }
+  possibleTypes {
+    ...TypeRef
+  }
+}
+
+fragment InputValue on __InputValue {
+  name
+  description
+  type { ...TypeRef }
+  defaultValue
 }
 
 fragment TypeRef on __Type {
@@ -56,6 +89,14 @@ fragment TypeRef on __Type {
           ofType {
             kind
             name
+            ofType {
+              kind
+              name
+              ofType {
+                kind
+                name
+              }
+            }
           }
         }
       }
@@ -63,44 +104,6 @@ fragment TypeRef on __Type {
   }
 }
 """
-
-ENGINE_SECURITY_NOTES = {
-    "Apollo": [
-        "Disable introspection and GraphQL Playground in production.",
-        "Apply query depth and complexity limits to prevent DoS.",
-        "Avoid detailed stack traces and GraphQL error internals in responses.",
-    ],
-    "Hasura": [
-        "Require strict admin secret/JWT validation and rotate credentials.",
-        "Harden row/column permission policies for every role.",
-        "Disable metadata/admin endpoints from public exposure.",
-    ],
-    "graphene-python": [
-        "Disable debug middleware and tracing extensions in production.",
-        "Add rate limiting and query cost control to endpoint.",
-        "Disable GraphiQL on internet-facing deployments.",
-    ],
-    "PostGraphile": [
-        "Constrain role privileges and schema exposure at DB level.",
-        "Use persisted queries / allow-lists for sensitive operations.",
-        "Disable detailed error hints leaking SQL metadata.",
-    ],
-    "Ariadne": [
-        "Turn off debug mode and rich tracebacks in production.",
-        "Apply operation depth and complexity guards.",
-        "Restrict introspection where not needed.",
-    ],
-    "Hot Chocolate": [
-        "Disable Banana Cake Pop / tooling endpoints on production.",
-        "Use cost analysis middleware and request timeout limits.",
-        "Harden authorization directives and resolver-level checks.",
-    ],
-    "Unknown": [
-        "Apply strict authZ/authN controls on each resolver path.",
-        "Use query complexity, depth, and rate limiting protections.",
-        "Disable introspection/UI tooling for public production endpoints.",
-    ],
-}
 
 
 def parse_headers(raw_headers: str) -> Dict[str, str]:
@@ -112,153 +115,24 @@ def parse_headers(raw_headers: str) -> Dict[str, str]:
     return {str(key): str(value) for key, value in parsed.items()}
 
 
-def _extract_named_type(type_obj: Dict[str, Any] | None) -> str | None:
-    current = type_obj
-    while current:
-        name = current.get("name")
-        if name:
-            return name
-        current = current.get("ofType")
-    return None
+def run_command(command: list[str]) -> Tuple[int, str, str]:
+    try:
+        process = subprocess.run(command, capture_output=True, text=True)
+        return process.returncode, process.stdout.strip(), process.stderr.strip()
+    except FileNotFoundError as exc:
+        return 127, "", str(exc)
 
 
-def execute_graphql(target: str, headers: Dict[str, str], query: str, variables: Any = None, operation_name: str | None = None) -> Tuple[Dict[str, Any], Dict[str, str]]:
-    payload: Dict[str, Any] = {"query": query}
-    if variables is not None:
-        payload["variables"] = variables
-    if operation_name:
-        payload["operationName"] = operation_name
-
-    response = requests.post(target, headers={"Content-Type": "application/json", **headers}, json=payload, timeout=40)
-    response.raise_for_status()
-    data = response.json()
-    return data, dict(response.headers)
-
-
-def run_graphql_cop_audit(target: str, headers: Dict[str, str]) -> List[Dict[str, Any]]:
-    findings: List[Dict[str, Any]] = []
-    base_headers = dict(GRAPHCOP_HEADERS)
-    base_headers.update(headers)
-
-    for test in graphql_cop_tests.values():
-        findings.append(test(target, {}, dict(base_headers), False))
-
-    return sorted(findings, key=lambda item: item["title"])
-
-
-def detect_engine(schema_data: Dict[str, Any], response_headers: Dict[str, str]) -> Dict[str, Any]:
-    scored: Dict[str, int] = {
-        "Apollo": 0,
-        "Hasura": 0,
-        "graphene-python": 0,
-        "PostGraphile": 0,
-        "Ariadne": 0,
-        "Hot Chocolate": 0,
-    }
-
-    lower_headers = {k.lower(): str(v).lower() for k, v in response_headers.items()}
-    header_blob = " ".join([f"{k}:{v}" for k, v in lower_headers.items()])
-
-    if "apollo" in header_blob:
-        scored["Apollo"] += 3
-    if "hasura" in header_blob:
-        scored["Hasura"] += 3
-    if "graphene" in header_blob:
-        scored["graphene-python"] += 3
-    if "postgraphile" in header_blob:
-        scored["PostGraphile"] += 3
-    if "ariadne" in header_blob:
-        scored["Ariadne"] += 3
-    if "hotchocolate" in header_blob or "chilli" in header_blob:
-        scored["Hot Chocolate"] += 3
-
-    schema = schema_data.get("__schema", {})
-    directives = {d.get("name", "").lower() for d in schema.get("directives", [])}
-    type_names = {t.get("name", "") for t in schema.get("types", [])}
-    type_blob = " ".join(type_names).lower()
-
-    if "cachecontrol" in directives:
-        scored["Apollo"] += 2
-    if {"cached", "frontend"}.intersection(directives):
-        scored["Hasura"] += 2
-    if "relay" in type_blob:
-        scored["PostGraphile"] += 1
-    if "query_root" in {name.lower() for name in type_names}:
-        scored["Hasura"] += 2
-    if "pageinfo" in type_names:
-        scored["PostGraphile"] += 1
-
-    best_engine = max(scored, key=lambda key: scored[key])
-    confidence = scored[best_engine]
-
-    if confidence == 0:
-        best_engine = "Unknown"
-
-    return {
-        "engine": best_engine,
-        "confidence": confidence,
-        "security_notes": ENGINE_SECURITY_NOTES[best_engine],
-        "signals": scored,
-    }
-
-
-def build_schema_artifacts(schema_data: Dict[str, Any]) -> Dict[str, Any]:
-    schema = schema_data.get("__schema", {})
-    all_types = schema.get("types", [])
-
-    object_types = [
-        t for t in all_types
-        if t.get("kind") == "OBJECT" and not str(t.get("name", "")).startswith("__")
-    ]
-
-    object_names = {t.get("name") for t in object_types if t.get("name")}
-
-    nodes = []
-    edges = []
-    for obj in object_types:
-        source = obj.get("name")
-        if not source:
-            continue
-        nodes.append({"data": {"id": source, "label": source}})
-
-        for field in obj.get("fields") or []:
-            target_name = _extract_named_type(field.get("type"))
-            if target_name and target_name in object_names:
-                edges.append({
-                    "data": {
-                        "id": f"{source}->{target_name}:{field.get('name')}",
-                        "source": source,
-                        "target": target_name,
-                        "label": field.get("name"),
-                    }
-                })
-
-    object_summaries = [
-        {
-            "name": t.get("name"),
-            "field_count": len(t.get("fields") or []),
-            "fields": [f.get("name") for f in (t.get("fields") or [])],
-        }
-        for t in object_types
-    ]
-
-    return {
-        "object_count": len(object_summaries),
-        "objects": sorted(object_summaries, key=lambda item: item["name"]),
-        "graph": {"nodes": nodes, "edges": edges},
-    }
-
-
-@app.get("/")
+@app.route("/")
 def index() -> str:
     return render_template("index.html")
 
 
-@app.post("/api/analyze")
-def analyze() -> Any:
+@app.post("/api/graphql-cop")
+def run_graphql_cop() -> Any:
     payload = request.get_json(silent=True) or {}
-    target = str(payload.get("target", "")).strip()
-    headers_raw = str(payload.get("headers", "")).strip()
+    target = payload.get("target", "").strip()
+    headers_raw = payload.get("headers", "")
 
     if not target:
         return jsonify({"error": "target is required"}), 400
@@ -268,67 +142,73 @@ def analyze() -> Any:
     except Exception as exc:
         return jsonify({"error": f"invalid headers JSON: {exc}"}), 400
 
-    try:
-        introspection_result, response_headers = execute_graphql(target, headers, INTROSPECTION_QUERY)
-    except requests.RequestException as exc:
-        return jsonify({"error": f"Failed to introspect endpoint: {exc}"}), 500
-    except ValueError:
-        return jsonify({"error": "Endpoint did not return valid JSON"}), 500
+    command = ["python", GRAPHQL_COP_SCRIPT, "-t", target, "-o", "json"]
+    for key, value in headers.items():
+        command.extend(["-H", json.dumps({key: value})])
 
-    if introspection_result.get("errors"):
-        return jsonify({"error": "Introspection is unavailable", "details": introspection_result.get("errors")}), 500
+    returncode, stdout, stderr = run_command(command)
 
-    schema_data = introspection_result.get("data") or {}
+    if returncode != 0:
+        return jsonify({"error": "GraphQL Cop execution failed", "stderr": stderr, "stdout": stdout}), 500
 
     try:
-        audit_findings = run_graphql_cop_audit(target, headers)
-    except Exception as exc:
-        return jsonify({"error": f"GraphQL Cop audit failed: {exc}"}), 500
+        findings = json.loads(stdout)
+    except json.JSONDecodeError:
+        return jsonify({"error": "GraphQL Cop output was not valid JSON", "stdout": stdout, "stderr": stderr}), 500
 
-    engine = detect_engine(schema_data, response_headers)
-    schema_artifacts = build_schema_artifacts(schema_data)
-
-    return jsonify({
-        "engine": engine,
-        "audit": audit_findings,
-        "schema": schema_artifacts,
-        "introspection": schema_data,
-    })
+    return jsonify({"findings": findings, "command": " ".join(command)})
 
 
-@app.post("/api/query")
-def run_query() -> Any:
+@app.post("/api/graphw00f")
+def run_graphw00f() -> Any:
     payload = request.get_json(silent=True) or {}
-    target = str(payload.get("target", "")).strip()
-    headers_raw = str(payload.get("headers", "")).strip()
-    query = str(payload.get("query", "")).strip()
-    variables_raw = payload.get("variables", "")
-    operation_name = str(payload.get("operationName", "")).strip() or None
+    target = payload.get("target", "").strip()
 
-    if not target or not query:
-        return jsonify({"error": "target and query are required"}), 400
+    if not target:
+        return jsonify({"error": "target is required"}), 400
+
+    command = [GRAPHW00F_CMD, "-d", target]
+    returncode, stdout, stderr = run_command(command)
+
+    if returncode != 0:
+        return jsonify({
+            "error": "Graphw00f execution failed",
+            "stderr": stderr,
+            "stdout": stdout,
+            "hint": "Ensure graphw00f is installed and available in PATH, or set GRAPHW00F_CMD.",
+        }), 500
+
+    return jsonify({"output": stdout, "command": " ".join(command)})
+
+
+@app.post("/api/introspection")
+def introspection() -> Any:
+    payload = request.get_json(silent=True) or {}
+    target = payload.get("target", "").strip()
+    headers_raw = payload.get("headers", "")
+
+    if not target:
+        return jsonify({"error": "target is required"}), 400
 
     try:
         headers = parse_headers(headers_raw)
     except Exception as exc:
         return jsonify({"error": f"invalid headers JSON: {exc}"}), 400
 
-    variables = None
-    if isinstance(variables_raw, str) and variables_raw.strip():
-        try:
-            variables = json.loads(variables_raw)
-        except Exception as exc:
-            return jsonify({"error": f"invalid variables JSON: {exc}"}), 400
-    elif isinstance(variables_raw, dict):
-        variables = variables_raw
+    req_headers = {"Content-Type": "application/json", **headers}
 
     try:
-        result, _ = execute_graphql(target, headers, query, variables=variables, operation_name=operation_name)
-        return jsonify({"result": result})
+        response = requests.post(target, headers=req_headers, json={"query": INTROSPECTION_QUERY}, timeout=30)
+        response.raise_for_status()
     except requests.RequestException as exc:
-        return jsonify({"error": f"GraphQL query failed: {exc}"}), 500
-    except ValueError:
-        return jsonify({"error": "Endpoint did not return valid JSON"}), 500
+        return jsonify({"error": f"Introspection request failed: {exc}"}), 500
+
+    data = response.json()
+
+    if "errors" in data:
+        return jsonify({"error": "Introspection returned errors", "details": data["errors"]}), 500
+
+    return jsonify({"introspection": data.get("data")})
 
 
 if __name__ == "__main__":
