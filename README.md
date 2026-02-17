@@ -175,3 +175,28 @@ docker run --rm -it graphql-cop:latest --help
 Troubleshooting
 1. File Not Found Error: If the container cannot find the script to execute, ensure the repository structure is intact and the Dockerfile is correctly set up.
 2. Dependencies Issue: If there are missing dependencies, verify that the requirements.txt file is complete.
+
+## GraphQOL Web UI
+
+The GraphQOL web app is intentionally standalone: clone, install requirements, run.
+
+### 30-second quick start
+
+```bash
+git clone https://github.com/dolevf/graphql-cop.git
+cd graphql-cop
+python3 -m pip install -r requirements.txt
+python3 app.py
+```
+
+Open `http://127.0.0.1:5000`.
+
+No compile step, no test-client bootstrap, and no extra service setup is required.
+
+### What the web app includes
+- **GraphQL engine identification (Python-native heuristics)**
+- **Engine-specific security hardening notes**
+- **GraphQL Cop-equivalent audit** (same test modules under `lib/tests`)
+- **Interactive schema graph**
+- **Schema object inventory**
+- **Built-in GraphQL query runner**
